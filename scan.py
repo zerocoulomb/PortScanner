@@ -20,11 +20,10 @@ def parse_arguments():
                           "if you want to give range you have to type like MIN_PORT MAX_PORT ",
                      type=str, nargs="+")
     src.add_argument("--thread",
-                     help="Thread number you can select between 1 and 500 if you don't select default is 200",
-                     default=200,
+                     help="Thread number you can select between 1 and 200 if you don't select default is 100",
+                     default=50,
                      type=int)
-    src.add_argument("--limit", help="don't show ports more than limit", type=int)
-    src.add_argument("-g", "--get", metavar="Read", help="Gets ports from .txt file")
+    src.add_argument("-f", "--file", metavar="Read file", help="Read ports from file")
     output = parse.add_argument_group("Output")
     output.add_argument("-w", "--write", metavar="Write", help="Write result to .txt or .json")
 
@@ -70,7 +69,7 @@ def parse_ports(scr, ports: list):
 def main():
     args = parse_arguments()
     scr = curses.initscr()
-    scr.addstr(pyfiglet.figlet_format("  PortScanner V 1.3", width=110) + "\n\n")
+    scr.addstr(pyfiglet.figlet_format("  PortScanner V 1.4", width=110) + "\n\n")
     scr.refresh()
 
     if not check_ip_valid(args.target):
@@ -82,13 +81,13 @@ def main():
 
     ports = args.port
 
-    if ports is None and args.get is None:
+    if ports is None and args.file is None:
         scr.addstr(" Please add give ports!\n ")
         scr.refresh()
         scr.getch()
         curses.endwin()
         sys.exit(1)
-    if args.get:
+    if args.file:
         if args.port:
             scr.addstr(" You cannot get ports from more then one options!\n ")
             scr.refresh()
@@ -96,7 +95,7 @@ def main():
             curses.endwin()
             sys.exit(1)
         else:
-            ports = get_ports_from_file(args.get)
+            ports = get_ports_from_file(args.file)
             if ports is None:
                 scr.addstr(" File is empty\n ")
                 scr.refresh()
@@ -104,12 +103,9 @@ def main():
                 curses.endwin()
                 sys.exit(1)
 
-    scanner = Scanner(args.thread, args.limit)
     ports = parse_ports(scr, ports)
-    scanner.put(args.target, ports)
+    scanner = Scanner(args.target, ports, args.thread)
     result = scanner.scan(scr)
-
-    result.print_status()
 
     if args.write:
         result.write_to_file(args.write)

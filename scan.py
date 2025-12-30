@@ -23,6 +23,7 @@ def parse_arguments():
                      help="Thread number you can select between 1 and 200 if you don't select default is 100",
                      default=50,
                      type=int)
+    src.add_argument("--max-retries", metavar="Max retries", type=int, default=3)
     src.add_argument("-f", "--file", metavar="Read file", help="Read ports from file")
     output = parse.add_argument_group("Output")
     output.add_argument("-w", "--write", metavar="Write", help="Write result to .txt or .json")
@@ -104,7 +105,17 @@ def main():
                 sys.exit(1)
 
     ports = parse_ports(scr, ports)
-    scanner = Scanner(args.target, ports, args.thread)
+
+    if args.max_retries:
+        if args.max_retries < 0:
+            scr.addstr(" Please enter valid max retry number\n ")
+            scr.refresh()
+            scr.getch()
+            curses.endwin()
+            sys.exit(1)
+
+
+    scanner = Scanner(args.target, ports, args.thread, args.max_retries)
     result = scanner.scan(scr)
 
     if args.write:

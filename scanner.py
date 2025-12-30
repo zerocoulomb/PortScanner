@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 class Scanner:
 
-    def __init__(self,host, ports,thread_count):
+    def __init__(self,host, ports,thread_count, max_retries):
 
         self.HOST = host
         self.server = None
@@ -20,6 +20,7 @@ class Scanner:
             raise InvalidThreadCountError("You have to select thread count between 1 and 200")
         self.THREADS = thread_count
         self.ports = ports
+        self.max_retries = max_retries
         self.open_ports = []
 
 
@@ -47,27 +48,39 @@ class Scanner:
         return PortStatus(self.open_ports, end - begin, scr)
 
     def _scan(self, port, scr):
-        server = None
-        try:
-            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.settimeout(1.5)
 
-            if server.connect_ex((self.HOST, port)) == 0:
-                try:
-                    banner = socket.getservbyport(port)
-                except:
-                    banner = "unknown"
+        for attempt in range(self.max_retries):
+            server = None
+            try:
+                server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server.settimeout(1.5)
 
-                with self.lock:
-                    scr.addstr(" " * 4 + str(port) + " " * 8 + "open" + " " * 10 + banner+ "\n")
-                    scr.refresh()
+                if server.connect_ex((self.HOST, port)) == 0:
+                    if self.HOST in ("127.0.0.1", "localhost","::1"):
+                        local_addr = server.getsockname()
+                        remote_addr = server.getpeername()
 
-                return (port, banner)
+                        if local_addr[1] == remote_addr[1]:
+                            server.close()
+                            time.sleep(0.01 * attempt)
+                            continue
 
-            return None
+                    try:
+                        banner = socket.getservbyport(port)
+                    except:
+                        banner = "unknown"
 
-        except:
-            return None
-        finally:
-            if server:
-                server.close()
+                    with self.lock:
+                        scr.addstr(" " * 4 + str(port) + " " * 8 + "open" + " " * 10 + banner+ "\n")
+                        scr.refresh()
+
+                    return port, banner
+
+                return None
+
+            except (socket.error, socket.timeout):
+                return None
+            finally:
+                if server:
+                    server.close()
+        return None

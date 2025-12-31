@@ -1,28 +1,22 @@
 import socket
-import re
 import threading
-
-from exceptions import InvalidThreadCountError
-from portstatus import PortStatus
 import time
 from concurrent.futures import ThreadPoolExecutor
+
+from portstatus import PortStatus
 
 
 class Scanner:
 
-    def __init__(self,host, ports,thread_count, max_retries):
+    def __init__(self, host, ports, thread_count, max_retries):
 
         self.HOST = host
         self.server = None
         self.lock = threading.Lock()
-        self.ip_format = re.compile(r"^[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}$")
-        if thread_count < 1 or thread_count > 200:
-            raise InvalidThreadCountError("You have to select thread count between 1 and 200")
         self.THREADS = thread_count
         self.ports = ports
         self.max_retries = max_retries
         self.open_ports = []
-
 
     def scan(self, scr):
         scr.addstr(f"  Scanning started on host {self.HOST}...\n")
@@ -33,7 +27,7 @@ class Scanner:
         begin = time.time()
 
         with ThreadPoolExecutor(max_workers=self.THREADS) as executor:
-            futures = [executor.submit(self._scan,port, scr) for port in self.ports]
+            futures = [executor.submit(self._scan, port, scr) for port in self.ports]
             for future in futures:
                 result = future.result()
                 if result:
@@ -41,9 +35,8 @@ class Scanner:
 
         end = time.time()
 
-        scr.addstr("\n\n  Scanning completed in {:.2f} seconds".format(end-begin))
+        scr.addstr("\n\n  Scanning completed in {:.2f} seconds".format(end - begin))
         scr.refresh()
-
 
         return PortStatus(self.open_ports, end - begin, scr)
 
@@ -56,7 +49,7 @@ class Scanner:
                 server.settimeout(1.5)
 
                 if server.connect_ex((self.HOST, port)) == 0:
-                    if self.HOST in ("127.0.0.1", "localhost","::1"):
+                    if self.HOST in ("127.0.0.1", "localhost", "::1"):
                         local_addr = server.getsockname()
                         remote_addr = server.getpeername()
 
@@ -71,7 +64,7 @@ class Scanner:
                         banner = "unknown"
 
                     with self.lock:
-                        scr.addstr(" " * 4 + str(port) + " " * 8 + "open" + " " * 10 + banner+ "\n")
+                        scr.addstr(" " * 4 + str(port) + " " * 8 + "open" + " " * 10 + banner + "\n")
                         scr.refresh()
 
                     return port, banner

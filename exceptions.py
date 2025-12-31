@@ -1,2 +1,0 @@
-class InvalidThreadCountError(Exception):
-    pass

@@ -2,7 +2,7 @@
 PortScanner is written with python language. Scans target host open ports.
 ```python
 
-python3 scan.py -t HOST -p 1 65535
+python3 scan.py HOST -p 1-65535
 
 
 ```

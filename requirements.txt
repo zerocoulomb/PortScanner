@@ -1,2 +1,1 @@
-pyfiglet>=0.8.post1
-
+pyfiglet==1.0.4

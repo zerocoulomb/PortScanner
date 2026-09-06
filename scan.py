@@ -1,39 +1,53 @@
 #!/usr/bin/env python3
 
-import curses
 import argparse
+import curses
+import re
 import socket
 import sys
+
 import pyfiglet
-import re
+
 from scanner import Scanner
 
 
 def parse_arguments():
     parse = argparse.ArgumentParser(
-        description="You can scan your given ports and you can see ports status and service names")
+        description="You can scan your given ports and see ports status and service names"
+    )
 
     src = parse.add_argument_group("Input")
-    src.add_argument("-t", "--target", metavar="Target", help="Target host", required=True)
-    src.add_argument("-p", "--port", metavar="Port",
-                     help="You can type one port or more like p1,p2,p3... "
-                          "if you want to give range you have to type like MIN_PORT MAX_PORT ",
-                     type=str, nargs="+")
-    src.add_argument("--thread",
-                     help="Thread number you can select between 1 and 500 if you don't select default is 200",
-                     default=200,
-                     type=int)
-    src.add_argument("--limit", help="don't show ports more than limit", type=int)
-    src.add_argument("-g", "--get", metavar="Read", help="Gets ports from .txt file")
+    src.add_argument(
+        "-t", "--target", metavar="Target", help="Target host", required=True
+    )
+    src.add_argument(
+        "-p",
+        "--port",
+        metavar="Port",
+        help="Multiple ports PORT1,PORT2,PORT3... or port range MIN_PORT MAX_PORT",
+        type=str,
+        nargs="+",
+    )
+    src.add_argument(
+        "--max-connections",
+        type=int,
+        default=100,
+        help="Maximum number of concurrent connections",
+    )
+
+    src.add_argument("-f", "--file", metavar="Read", help="Read ports from file")
     output = parse.add_argument_group("Output")
-    output.add_argument("-w", "--write", metavar="Write", help="Write result to .txt or .json")
+    output.add_argument(
+        "-w", "--write", metavar="Write", help="Write result to *.txt, *.json or *.csv"
+    )
 
     args = parse.parse_args()
 
     return args
 
 
-def get_ports_from_file(file_name):
+def read_ports_from_file(file_name):
+
     with open(file_name, "r") as f:
         data = f.read().splitlines()
         data = ",".join(data)
@@ -43,26 +57,26 @@ def get_ports_from_file(file_name):
             return None
 
 
-def check_ip_valid(host):
+def parse_target(host):
     ip_format = re.compile(r"^[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}$")
     host = socket.gethostbyname(host)
-    return True if ip_format.match(host) else False
+
+    if ip_format.match(host):
+        return host
+    return None
 
 
-def parse_ports(scr, ports: list):
-    if len(ports) == 2 and all(map(lambda x: x.isdecimal() and 0 <= int(x) <= 65535, ports)):
-        isrange = True
-    elif all(map(lambda x: x.isdecimal() and 0 <= int(x) <= 65535, "".join(ports).replace(" ", "").split(","))):
-        isrange = False
-    else:
-        scr.addstr(" Please enter valid arguments\n ")
-        scr.refresh()
-        scr.getch()
-        curses.endwin()
-        sys.exit(1)
+def parse_ports(ports: list):
 
-    port_list = [*map(lambda x: int(x), "".join(ports).split(","))] if not isrange else range(int(ports[0]),
-                                                                                              int(ports[1]) + 1)
+    port_list = None
+
+    if len(ports) == 1 and ports[0] == "-":
+        port_list = range(65536)
+    elif len(ports) == 2 and all(x.isdecimal() and 0 <= int(x) <= 65535 for x in ports):
+        port_list = range(int(ports[0]), int(ports[1]) + 1)
+
+    elif all(x.isdecimal() and 0 <= int(x) <= 65535 for x in "".join(ports).split(",")):
+        port_list = (int(x) for x in "".join(ports).split(","))
 
     return port_list
 
@@ -70,11 +84,14 @@ def parse_ports(scr, ports: list):
 def main():
     args = parse_arguments()
     scr = curses.initscr()
-    scr.addstr(pyfiglet.figlet_format("  PortScanner V 1.3", width=110) + "\n\n")
+    scr.addstr(pyfiglet.figlet_format("  PortScanner V 1.4", width=110) + "\n\n")
     scr.refresh()
 
-    if not check_ip_valid(args.target):
-        scr.addstr(" Please enter valid ipv4 address\n ")
+    host = parse_target(args.target)
+
+    if host is None:
+
+        scr.addstr(" Please enter valid host\n ")
         scr.refresh()
         scr.getch()
         curses.endwin()
@@ -82,13 +99,14 @@ def main():
 
     ports = args.port
 
-    if ports is None and args.get is None:
-        scr.addstr(" Please add give ports!\n ")
+    if ports is None and args.file is None:
+        scr.addstr(" Please add ports!\n ")
         scr.refresh()
         scr.getch()
         curses.endwin()
         sys.exit(1)
-    if args.get:
+
+    if args.file:
         if args.port:
             scr.addstr(" You cannot get ports from more then one options!\n ")
             scr.refresh()
@@ -96,7 +114,7 @@ def main():
             curses.endwin()
             sys.exit(1)
         else:
-            ports = get_ports_from_file(args.get)
+            ports = read_ports_from_file(args.file)
             if ports is None:
                 scr.addstr(" File is empty\n ")
                 scr.refresh()
@@ -104,12 +122,19 @@ def main():
                 curses.endwin()
                 sys.exit(1)
 
-    scanner = Scanner(args.thread, args.limit)
-    ports = parse_ports(scr, ports)
-    scanner.put(args.target, ports)
-    result = scanner.scan(scr)
+    ports = parse_ports(ports)
 
-    result.print_status()
+    if ports is None:
+        scr.addstr(" Please enter valid ports\n ")
+        scr.refresh()
+        scr.getch()
+        curses.endwin()
+        sys.exit(1)
+
+    scanner = Scanner(args.max_connections)
+    result = scanner.scan(scr, host, ports)
+
+    result.print_status(scr)
 
     if args.write:
         result.write_to_file(args.write)
